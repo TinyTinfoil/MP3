@@ -1,5 +1,4 @@
 #include <Adafruit_MotorShield.h>
-#include <PID_v1.h>
 // Create the motor shield object with the default I2C address
 Adafruit_MotorShield AFMS = Adafruit_MotorShield();
 
@@ -14,14 +13,8 @@ uint16_t sensor_floor = 780;
 uint32_t time;
 uint32_t loop_time = 0;
 uint32_t LOOP_INTERVAL = 500;
-double displacement = 0;
-double angle_adjustment = 0;
-double zero_angle = 100;
+int displacement = 0;
 uint16_t base_speed = 50;
-// params set using: https://en.wikipedia.org/wiki/Ziegler%E2%80%93Nichols_method
-// Tu = 0.78, Ku = 1
-double Kp=1, Ki=0, Kd=0;
-PID PID(&displacement, &angle_adjustment, &zero_angle, Kp, Ki, Kd, DIRECT);
 void setup() {
   // put your setup code here, to run once:
   // start the serial port
@@ -40,15 +33,10 @@ void setup() {
   motorL->run(RELEASE);
   motorR->setSpeed(50);
   motorR->run(RELEASE);
-  // motorL->run(RELEASE);
-  // motorR->run(RELEASE);
   
   while (Serial.available() - 4 < 0) {}     //wait for data available (any)
   // turn on motor
   loop_time = millis();
-
-  // displacement = (double) calc_error();
-  PID.SetMode(AUTOMATIC);
 }
 
 
@@ -63,24 +51,22 @@ void loop() {
     base_speed = num * 10; // set speed to typed 1 int value
   }
   // put your main code here, to run repeatedly:
-  displacement = (double) calc_error();
+  displacement = calc_error();
+  Serial.println(displacement);
 
-  int temp_angle_adjustment = -angle_adjustment + 120;
-  Serial.println(angle_adjustment);
-  PID.Compute();
-  motor_run_left(temp_angle_adjustment/3);
-  motor_run_right(temp_angle_adjustment/3);
+  motor_run_left(displacement/5);
+  motor_run_right(displacement/5);
 }
 
 
 void motor_run_left(int error){
   motorL->setSpeed((uint8_t)(base_speed+error));
-  motorL->run(FORWARD);
+  motorL->run(BACKWARD);
 }
 
 void motor_run_right(int error){
   motorR->setSpeed((uint8_t)(base_speed-error));
-  motorR->run(BACKWARD);
+  motorR->run(FORWARD);
 }
 
 int calc_error(){
