@@ -1,21 +1,27 @@
 #include <Adafruit_MotorShield.h>
-
+#include <PID_v1.h>
 // Create the motor shield object with the default I2C address
 Adafruit_MotorShield AFMS = Adafruit_MotorShield();
 
 // Select which 'port' M3 or M4
-Adafruit_DCMotor* motorL = AFMS.getMotor(3);
-Adafruit_DCMotor* motorR = AFMS.getMotor(4);
+Adafruit_DCMotor* motorL = AFMS.getMotor(4);
+Adafruit_DCMotor* motorR = AFMS.getMotor(3);
 
-uint8_t lsensor_pin = 0;
-uint8_t rsensor_pin = 1;
+#define lsensor_pin 0
+#define rsensor_pin 1
+
 uint16_t sensor_floor = 780;
 uint32_t time;
 uint32_t loop_time = 0;
 uint32_t LOOP_INTERVAL = 500;
-uint16_t displacement = 0;
-uint16_t angle_adjustment = 0;
-uint16_t zero_ptr = 0;
+double displacement = 0;
+double angle_adjustment = 0;
+double zero_angle = 100;
+uint16_t base_speed = 50;
+// params set using: https://en.wikipedia.org/wiki/Ziegler%E2%80%93Nichols_method
+// Tu = 0.78, Ku = 1
+double Kp=1, Ki=0, Kd=0;
+PID PID(&displacement, &angle_adjustment, &zero_angle, Kp, Ki, Kd, DIRECT);
 void setup() {
   // put your setup code here, to run once:
   // start the serial port
@@ -28,7 +34,7 @@ void setup() {
     while (1);
   }
   AFMS.begin();
-  Serial.println("Motor Shield found.");
+  Serial.println("Motor Shield Ready");
   // Set the speed to start, from 0 (off) to 255 (max speed)
   motorL->setSpeed(50);
   motorL->run(RELEASE);
@@ -39,46 +45,49 @@ void setup() {
   
   while (Serial.available() - 4 < 0) {}     //wait for data available (any)
   // turn on motor
-  while (Serial.available() - 4 < 0) {}     //wait for data available (any)
   loop_time = millis();
 
-  // PID(&displacement, &angle_adjustment, &zero_ptr, Kp, Ki, Kd, DIRECT) 
+  // displacement = (double) calc_error();
+  PID.SetMode(AUTOMATIC);
 }
 
 
-uint8_t turn_scaling = 100;
 void loop() {
-  Serial.print(analogRead(0));
-  Serial.print(",");
-  Serial.println(analogRead(1));
+  // Serial.print(analogRead(0));
+  // Serial.print(",");
+  // Serial.println(analogRead(1));
   time = millis();
-  // put your main code here, to run repeatedly:
-  displacement = calc_error();
-
-  motor_run_left(displacement);
-  motor_run_right(displacement);
-  while (time - loop_time > LOOP_INTERVAL) {
-    time = millis();
+  if (Serial.available() - 1 < 0 && Serial.read() == ':'){
+    while (Serial.available() - 1 < 0) {}     //wait for data available
+    int num = Serial.read();
+    base_speed = num * 10; // set speed to typed 1 int value
   }
-  loop_time = millis();
+  // put your main code here, to run repeatedly:
+  displacement = (double) calc_error();
+
+  int temp_angle_adjustment = -angle_adjustment + 120;
+  Serial.println(angle_adjustment);
+  PID.Compute();
+  motor_run_left(temp_angle_adjustment/3);
+  motor_run_right(temp_angle_adjustment/3);
 }
 
-uint16_t base_speed = 50;
-void motor_run_left(uint16_t error){
-  motorL->setSpeed(base_speed+error);
-  motorL->run(BACKWARD);
+
+void motor_run_left(int error){
+  motorL->setSpeed((uint8_t)(base_speed+error));
+  motorL->run(FORWARD);
 }
 
-void motor_run_right(uint16_t error){
-  motorR->setSpeed(base_speed-error);
-  motorR->run(FORWARD);
+void motor_run_right(int error){
+  motorR->setSpeed((uint8_t)(base_speed-error));
+  motorR->run(BACKWARD);
 }
 
-uint16_t calc_error(){
+int calc_error(){
   // todo - remap sensor inputs to range
-  uint16_t lsensor = analogRead(lsensor_pin);
-  uint16_t rsensor = analogRead(rsensor_pin);
-  lsensor -= sensor_floor;
-  rsensor -= sensor_floor;
+  double lsensor = analogRead(lsensor_pin);
+  double rsensor = analogRead(rsensor_pin);
+  lsensor -= 803;
+  rsensor -= 822;
   return lsensor - rsensor;
 }
